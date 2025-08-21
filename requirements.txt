@@ -1,0 +1,12 @@
+# Core scientific stack (Python 3.13 compatible)
+pandas>=2.2,<3.0
+numpy>=2.0,<3.0
+scipy>=1.13,<2.0
+matplotlib>=3.8,<4.0
+
+# Survival analysis (optional; for KM)
+lifelines>=0.27,<0.28
+
+# Utilities
+python-dateutil>=2.9
+tqdm>=4.66
