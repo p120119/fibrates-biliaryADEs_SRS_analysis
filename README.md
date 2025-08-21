@@ -1,7 +1,8 @@
 # Fibrates-Biliary ADEs SRS Reproducible Code (MSIP + Python)
 
-This repository provides Python scripts and SQL pseudocode to reproduce the analysis of **biliary adverse drug events (ADEs) potentially associated with fibrates** using spontaneous reporting systems (SRS) such as FAERS and JADER.  
-**Status:** WIP – interfaces are stable; internals may evolve.
+This repository provides **MSIP node scripts (Python)** and **SQL-like pseudocode** to reproduce analysis of **biliary adverse drug events (ADEs) potentially associated with fibrates** using spontaneous reporting systems (SRS) such as FAERS and JADER.
+
+> This code is intended to run **inside MSIP** (ALKANO/MSI pipeline). CLI wrappers are not included; node scripts consume MSIP tables (`table`, `table1`, …) and return `result` MSIP DataFrames.
 
 ## Quickstart
 
@@ -13,32 +14,44 @@ python -V
 python -m venv .venv
 # Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
-# (If using cmd.exe: .\.venv\Scripts\activate.bat)
+# (If using cmd.exe: .\.venv\Scriptsctivate.bat)
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Run the end-to-end pipeline (example)
-python scripts/run_pipeline.py --input data/raw --output outputs
 ```
+
+**MSIP usage (conceptual):**
+- Import scripts from `scripts/` into your MSIP nodes.
+- Provide the expected input tables (see “Node map & I/O” below).
+- Results are written to MSIP outputs and, when relevant, CSVs under `outputs/`.
 
 ## Repository Structure
 
 ```
-├─ scripts/             # runnable Python scripts (ETL, metrics, figures)
-│  ├─ run_pipeline.py   # entry point CLI
-│  ├─ etl.py            # parsing / harmonization helpers (TBD)
-│  ├─ metrics.py        # counts -> ROR/PRR/IC (TBD)
-│  ├─ km_raw.py         # Kaplan-Meier inputs per drug/event (TBD)
-│  └─ km_bootstrap.py   # KM bootstrap + IQR (TBD)
-├─ sql/
-│  └─ pseudocode.md     # SQL pseudocode describing DB operations
+├─ scripts/                          # MSIP Python nodes
+│  ├─ node_001_demo_bmi.py           # DEMO numeric conversion (+5 adjust) & BMI
+│  ├─ node_002_drug_counts_unified.py# JADER/FAERS auto-detect → num_drugs & case_id
+│  ├─ node_003_normalize_drug_names_simple.py  # normalize 'drug_of_interest' (both DS)
+│  ├─ node_004_metrics.py            # 2x2 → ROR/PRR/IC, Fisher p, χ²
+│  ├─ node_005_ebgm.py               # EBGM (MGPS-like; deterministic seed=12345)
+│  ├─ node_006_tto_earliest_pair.py  # earliest valid (start,event) pair per group
+│  └─ node_007_faers_demo_dedup.py   # FAERS DEMO: caseid→max(caseversion)
+│
+├─ sql/                              # SQL-like pseudocode (dataset-agnostic)
+│  ├─ 00_conventions.md
+│  ├─ 10_plid.md
+│  ├─ 20_disproportionality.md
+│  ├─ 30_stratified.md
+│  ├─ 40_time_to_onset.md
+│  ├─ 50_ebgm.md
+│  └─ 90_figures.md
+│
 ├─ data/
-│  └─ README.md         # how to obtain/place data (no raw data in repo)
-├─ outputs/             # generated tables/figures (created at runtime)
+│  └─ README.md                      # how to obtain/place data (no raw data in repo)
+├─ outputs/                          # generated tables/figures (created at runtime)
 ├─ requirements.txt
 ├─ .gitignore
-├─ LICENSE              # <TBD: MIT/Apache-2.0/etc.>
+├─ LICENSE                           # MIT License
 └─ README.md
 ```
 
@@ -51,60 +64,65 @@ Place files as:
 - `data/parsed/`: intermediate normalized tables (created)  
 - `outputs/`    : final results (created)
 
-See `data/README.md` for exact filenames and expected columns (<TBD>).
+See `data/README.md` for exact filenames and expected columns.
 
 ## Reproducibility
 
 - **Python:** 3.13  
 - **OS (tested):** Windows 11  
-- **Packages:** pinned in `requirements.txt`  
-- **Randomness:** set seeds where applicable (`--seed`, default 42)
+- **Packages:** pinned in `requirements.txt` (SciPy required for metrics/EBGM)  
+- **Randomness:** fixed seeds where applicable
+  - `node_005_ebgm.py`: **BASE_SEED = 12345** (NumPy RNG; deterministic sampling)
+  - elsewhere: settable by MSIP node parameters if needed
 
 > Repository policy: **English/ASCII only** for file names and text.
 
-## Analysis Policies
+## Analysis Policies (summary)
 
-- **Signal metrics:** ROR, PRR, and IC computed from 2x2 counts.  
-- **Time-to-onset (TTO):** Kaplan-Meier methods for descriptive TTO; optional bootstrap for IQR.  
-- **Censoring/Windows:** <TBD>
+- **Signal metrics:** ROR, PRR, IC computed from **2×2** counts. IC uses a WHO-style closed-form (see `node_004_metrics.py`).  
+- **Time-to-onset (TTO):** default scope is **Pemafibrate only**; earliest valid `(start_date, event_date)` pair; negative TTO excluded; `(event - start) + 1` days.  
+- **Join policy (TTO):** prefer **FULL OUTER JOIN** for `DRUG`↔`REAC` at case level, then filter to valid date pairs (see `sql/40_time_to_onset.md`).  
+- **Dataset IDs:** JADER = `識別番号`, FAERS = `primaryid` → both normalized to **`case_id`** upstream (`node_002_*`).
 
-## Command-Line Interface
+## Node map & I/O (MSIP)
 
-```text
-python scripts/run_pipeline.py --input <PATH> --output <PATH> [options]
+- **node_001 (`scripts/node_001_demo_bmi.py`)**  
+  Input: DEMO-like table (`体重`, `身長`, `年齢`) → Output: adds `WEIGHT`, `HEIGHT`, `AGE`, `BMI` (+ helpers).
 
-Options:
-  --input PATH        Path to source data directory (default: data/raw)
-  --output PATH       Path to output directory (default: outputs)
-  --n-jobs INT        Parallel workers for heavy steps (default: 1)
-  --seed INT          Random seed for reproducible sampling/bootstrap (default: 42)
-  --log-level STR     DEBUG|INFO|WARNING|ERROR (default: INFO)
-```
+- **node_002 (`scripts/node_002_drug_counts_unified.py`)**  
+  Auto-detects JADER/FAERS, outputs **`num_drugs`** and **`case_id`** (plus `服薬数`/`number_of_drug` for compatibility).
 
-## Expected Outputs
+- **node_003 (`scripts/node_003_normalize_drug_names_simple.py`)**  
+  Normalizes **`drug_of_interest`** via substring mappings (`yure_dict`).
 
-- `outputs/counts.csv` — 2x2 counts per (drug, event, strata)  
-- `outputs/metrics.csv` — ROR/PRR/IC with CIs and p-values (specs <TBD>)  
-- `outputs/km_raw/<drug>__<event>.csv` — KM-ready TTO records (specs <TBD>)  
-- `outputs/km_bootstrap/<drug>__<event>.csv` — bootstrap summaries (optional)  
-- `outputs/figs/` — key figures (e.g., volcano/scatter, KM curves) (<TBD>)
+- **node_004 (`scripts/node_004_metrics.py`)**  
+  Inputs: totals table (`n++`, `n+1`) as `table`; per-drug table (`drug`, `n1+`, `n11`) as `table1`.  
+  Outputs: per-drug **`n11, n12, n21, n22, ROR, PRR, IC, Fisher p, χ²`**.
 
+- **node_005 (`scripts/node_005_ebgm.py`)**  
+  Input: `table_027`-like wide table with **`drug_of_interest, Subgroup, n11, n12, n21, n22`** (Overall + subgroup rows).  
+  Output: per-drug **`E0, O, n1+, n+1, n++, EBGM, EBGM05, EBGM95, MGPS_Signal`** (`table_028`).  
+  Notes: Subgroup rows are aggregated to compute E0; **deterministic sampling** (seed=12345).
+
+- **node_006 (`scripts/node_006_tto_earliest_pair.py`)**  
+  Input: table with date columns at **indices 2 (start) and 4 (event)**; groups = other columns.  
+  Output: retains **earliest pair** per group; optionally enforce `start <= event`.
+
+- **node_007 (`scripts/node_007_faers_demo_dedup.py`)**  
+  Input: FAERS DEMO (`caseid`, `caseversion`); Output: **max(caseversion)** per `caseid` (use `primaryid` downstream).
 
 ## Figures/Tables ↔ Code Mapping (MSIP)
 
-- **node_004** = counts -> metrics (`scripts/metrics.py`)  
-- **node_005** = EBGM from subgroup counts (`scripts/ebgm.py`, or Python node reading `table_027` -> `table_028`)  
-- **node_006** = TTO earliest-pair extraction (`scripts/km_raw.py`), then KM/quantiles downstream
+- **node_004** = 2×2 metrics → (optional) export `outputs/metrics.csv`  
+- **node_005** = EBGM (`table_027` → `table_028`) → (optional) export under `outputs/tables/`  
+- **node_006** = TTO earliest-pair → KM-ready CSV under `outputs/km_raw/`
+
+For naming/versioning of figures/tables and metadata cataloging, see `sql/90_figures.md`.
 
 ## SQL Pseudocode
 
-High-level steps are provided in `sql/pseudocode.md`:
-1) input sources and unique case identifier harmonization,  
-2) deduplication and drug mapping (ATC/ingredients),  
-3) filtering rules/date windows,  
-4) counts -> metrics,  
-5) outputs.  
-Fill in `<TBD>` assumptions inline as you finalize.
+See `sql/*.md` for dataset-agnostic pseudocode. The flow aligns with the Word spec:  
+1) conventions/aliases, 2) PLID, 3) disproportionality, 4) stratified & export `table_024′` → concat → **import `table_027`**, 5) EBGM in Python (**node_005**) → **`table_028`**, 6) figures.
 
 ## How to Cite
 
@@ -118,7 +136,7 @@ A machine-readable citation file (`CITATION.cff`) is recommended once the metada
 
 ## License
 
-<TBD: MIT/Apache-2.0/BSD-3>. See `LICENSE`. If unsure, MIT is a simple default.
+**MIT** — see `LICENSE`.
 
 ## Contact
 
@@ -128,9 +146,7 @@ A machine-readable citation file (`CITATION.cff`) is recommended once the metada
 
 ## Roadmap / TODO
 
-- [ ] Finalize data schema in `data/README.md` (file list and required columns)
-- [ ] Lock analysis policies (e.g., TTO windows, filters) and document them
-- [ ] Complete `metrics.py`, `km_raw.py`, and `km_bootstrap.py`
-- [ ] Add figure scripts and save under `outputs/figs/`
+- [ ] Add `examples/` with minimal CSVs and run notes
+- [ ] Add `outputs/_catalog.json` for figure/table provenance
+- [ ] Add CI (GitHub Actions) smoke test on Python 3.13
 - [ ] Add `CITATION.cff` with authors, title, version, date
-- [ ] Add tested Windows 11 build numbers and Python 3.13.x patch versions
