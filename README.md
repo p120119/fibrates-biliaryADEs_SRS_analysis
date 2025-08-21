@@ -1,43 +1,38 @@
 # Fibrates-Biliary ADEs SRS Reproducible Code (MSIP + Python)
 
-This repository provides **MSIP node scripts (Python)** and **SQL-like pseudocode** to reproduce analysis of **biliary adverse drug events (ADEs) potentially associated with fibrates** using spontaneous reporting systems (SRS) such as FAERS and JADER.
+This repository publishes **SQL-like pseudocode** and **MSIP Python node scripts** used in an English-language paper on **biliary adverse events potentially associated with fibrates**.  
+It is designed for **code transparency and review** — **datasets and outputs are *not* included**.
 
-> This code is intended to run **inside MSIP** (ALKANO/MSI pipeline). CLI wrappers are not included; node scripts consume MSIP tables (`table`, `table1`, …) and return `result` MSIP DataFrames.
+> The Python scripts are intended to run **inside MSIP** (ALKANO/MSI pipeline). They consume MSIP tables (e.g., `table`, `table1`) and must return `result` (MSIP DataFrame). No standalone CLI is provided.
 
-## Quickstart
+## Quickstart (environment only)
 
 ```bash
-# Python 3.13 is recommended
+# Python 3.13
 python -V
 
-# Create and activate a virtual environment
+# (Optional) virtual environment
 python -m venv .venv
 # Windows PowerShell:
 .\.venv\Scripts\Activate.ps1
-# (If using cmd.exe: .\.venv\Scriptsctivate.bat)
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-**MSIP usage (conceptual):**
-- Import scripts from `scripts/` into your MSIP nodes.
-- Provide the expected input tables (see “Node map & I/O” below).
-- Results are written to MSIP outputs and, when relevant, CSVs under `outputs/`.
-
-## Repository Structure
+## Repository Structure (minimal, code-only)
 
 ```
 ├─ scripts/                          # MSIP Python nodes
-│  ├─ node_001_demo_bmi.py           # DEMO numeric conversion (+5 adjust) & BMI
-│  ├─ node_002_drug_counts_unified.py# JADER/FAERS auto-detect → num_drugs & case_id
-│  ├─ node_003_normalize_drug_names_simple.py  # normalize 'drug_of_interest' (both DS)
-│  ├─ node_004_metrics.py            # 2x2 → ROR/PRR/IC, Fisher p, χ²
-│  ├─ node_005_ebgm.py               # EBGM (MGPS-like; deterministic seed=12345)
-│  ├─ node_006_tto_earliest_pair.py  # earliest valid (start,event) pair per group
-│  └─ node_007_faers_demo_dedup.py   # FAERS DEMO: caseid→max(caseversion)
+│  ├─ node_001_demo_bmi.py
+│  ├─ node_002_drug_counts_unified.py
+│  ├─ node_003_normalize_drug_names_simple.py
+│  ├─ node_004_metrics.py
+│  ├─ node_005_ebgm.py
+│  ├─ node_006_tto_earliest_pair.py
+│  └─ node_007_faers_demo_dedup.py
 │
-├─ sql/                              # SQL-like pseudocode (dataset-agnostic)
+├─ sql/                              # SQL-like pseudocode
 │  ├─ 00_conventions.md
 │  ├─ 10_plid.md
 │  ├─ 20_disproportionality.md
@@ -47,92 +42,76 @@ pip install -r requirements.txt
 │  └─ 90_figures.md
 │
 ├─ data/
-│  └─ README.md                      # how to obtain/place data (no raw data in repo)
-├─ outputs/                          # generated tables/figures (created at runtime)
+│  └─ README.md                      # data expectations (placement & columns only)
+│
 ├─ requirements.txt
 ├─ .gitignore
-├─ LICENSE                           # MIT License
-└─ README.md
+├─ LICENSE                           # MIT
+└─ README.md                         # (this file)
 ```
 
-## Data Layout (not distributed)
+> **Note**: Folders like `outputs/`, `data/raw/`, `data/parsed/` are **not included** in this repository to keep it code-only.  
+> At runtime in your environment, create them as needed. See `data/README.md` for expected layouts.
 
-This project **does not** distribute FAERS/JADER source files. Please obtain them according to the respective licenses/institutional policies.
+## Reproducibility & Policies (summary)
 
-Place files as:
-- `data/raw/`   : original SRS tables (FAERS/JADER), untouched  
-- `data/parsed/`: intermediate normalized tables (created)  
-- `outputs/`    : final results (created)
+- **Python:** 3.13 / **OS (tested):** Windows 11  
+- **Packages:** see `requirements.txt` (SciPy required)  
+- **Randomness:** fixed seeds where applicable  
+  - `node_005_ebgm.py` uses **BASE_SEED = 12345** (NumPy RNG) for deterministic sampling.
 
-See `data/README.md` for exact filenames and expected columns.
+**Analysis policies** (aligned with the Word spec and SQL docs):
 
-## Reproducibility
+- **Signal metrics:** ROR, PRR, IC (WHO-style closed-form) from 2×2 counts (`node_004`).
+- **TTO:** default focus **Pemafibrate only**; earliest valid `(start, event)` pair; `(event - start) + 1` days; negative TTO excluded (`node_006`).
+- **Join policy (TTO):** use **FULL OUTER JOIN** for `DRUG`↔`REAC` at case level, then filter to valid pairs (see `sql/40_time_to_onset.md`).
+- **IDs:** JADER = `識別番号`; FAERS = `primaryid` → normalize upstream to **`case_id`** (`node_002`).
 
-- **Python:** 3.13  
-- **OS (tested):** Windows 11  
-- **Packages:** pinned in `requirements.txt` (SciPy required for metrics/EBGM)  
-- **Randomness:** fixed seeds where applicable
-  - `node_005_ebgm.py`: **BASE_SEED = 12345** (NumPy RNG; deterministic sampling)
-  - elsewhere: settable by MSIP node parameters if needed
+## Node Map & I/O (MSIP)
 
-> Repository policy: **English/ASCII only** for file names and text.
+- **node_001** — DEMO numeric conversion (+5 to weight/height) & BMI  
+  *Input:* `体重`, `身長`, `年齢` → *Output:* `WEIGHT`, `HEIGHT`, `AGE`, `BMI` (+ helpers)
 
-## Analysis Policies (summary)
+- **node_002** — Count drugs per case (auto-detect JADER/FAERS)  
+  *Output:* standardized **`case_id`**, **`num_drugs`** (+ compatibility columns: `服薬数` / `number_of_drug`)
 
-- **Signal metrics:** ROR, PRR, IC computed from **2×2** counts. IC uses a WHO-style closed-form (see `node_004_metrics.py`).  
-- **Time-to-onset (TTO):** default scope is **Pemafibrate only**; earliest valid `(start_date, event_date)` pair; negative TTO excluded; `(event - start) + 1` days.  
-- **Join policy (TTO):** prefer **FULL OUTER JOIN** for `DRUG`↔`REAC` at case level, then filter to valid date pairs (see `sql/40_time_to_onset.md`).  
-- **Dataset IDs:** JADER = `識別番号`, FAERS = `primaryid` → both normalized to **`case_id`** upstream (`node_002_*`).
+- **node_003** — Normalize **`drug_of_interest`** via substring mapping (`yure_dict`)  
+  *Assumption:* the column name is already `drug_of_interest` for both datasets.
 
-## Node map & I/O (MSIP)
+- **node_004** — 2×2 metrics (ROR/PRR/IC, Fisher p, χ²)  
+  *Inputs:* totals (`table`), per-drug counts (`table1`) — see comments in the file for column expectations.
 
-- **node_001 (`scripts/node_001_demo_bmi.py`)**  
-  Input: DEMO-like table (`体重`, `身長`, `年齢`) → Output: adds `WEIGHT`, `HEIGHT`, `AGE`, `BMI` (+ helpers).
+- **node_005** — EBGM (MGPS-like; deterministic)  
+  *Input:* `table_027`-like table with `drug_of_interest, Subgroup, n11, n12, n21, n22` (Overall + subgroup rows)  
+  *Output:* per-drug `E0, O, n1+, n+1, n++, EBGM, EBGM05, EBGM95, MGPS_Signal` (`table_028`).
 
-- **node_002 (`scripts/node_002_drug_counts_unified.py`)**  
-  Auto-detects JADER/FAERS, outputs **`num_drugs`** and **`case_id`** (plus `服薬数`/`number_of_drug` for compatibility).
+- **node_006** — Keep earliest valid `(start, event)` pair per group  
+  *Assumption:* date columns are at indices **2 (start)** and **4 (event)**.
 
-- **node_003 (`scripts/node_003_normalize_drug_names_simple.py`)**  
-  Normalizes **`drug_of_interest`** via substring mappings (`yure_dict`).
+- **node_007** — FAERS DEMO de-duplication  
+  *Logic:* for each `caseid`, keep row with max(`caseversion`) → use `primaryid` downstream.
 
-- **node_004 (`scripts/node_004_metrics.py`)**  
-  Inputs: totals table (`n++`, `n+1`) as `table`; per-drug table (`drug`, `n1+`, `n11`) as `table1`.  
-  Outputs: per-drug **`n11, n12, n21, n22, ROR, PRR, IC, Fisher p, χ²`**.
+## Figures/Tables ↔ Code Mapping
 
-- **node_005 (`scripts/node_005_ebgm.py`)**  
-  Input: `table_027`-like wide table with **`drug_of_interest, Subgroup, n11, n12, n21, n22`** (Overall + subgroup rows).  
-  Output: per-drug **`E0, O, n1+, n+1, n++, EBGM, EBGM05, EBGM95, MGPS_Signal`** (`table_028`).  
-  Notes: Subgroup rows are aggregated to compute E0; **deterministic sampling** (seed=12345).
+- **node_004** → 2×2 metrics (optionally export as CSV in your environment)  
+- **node_005** → EBGM (`table_027` → `table_028`)  
+- **node_006** → TTO earliest-pair (KM-ready)
 
-- **node_006 (`scripts/node_006_tto_earliest_pair.py`)**  
-  Input: table with date columns at **indices 2 (start) and 4 (event)**; groups = other columns.  
-  Output: retains **earliest pair** per group; optionally enforce `start <= event`.
+For naming and provenance conventions, see `sql/90_figures.md`.
 
-- **node_007 (`scripts/node_007_faers_demo_dedup.py`)**  
-  Input: FAERS DEMO (`caseid`, `caseversion`); Output: **max(caseversion)** per `caseid` (use `primaryid` downstream).
+## SQL Pseudocode Flow
 
-## Figures/Tables ↔ Code Mapping (MSIP)
+1) conventions/aliases → 2) PLID → 3) disproportionality → 4) stratified & export `table_024′` → concat → **import `table_027`** → 5) EBGM in Python (**node_005**) → **`table_028`** → 6) figures.
 
-- **node_004** = 2×2 metrics → (optional) export `outputs/metrics.csv`  
-- **node_005** = EBGM (`table_027` → `table_028`) → (optional) export under `outputs/tables/`  
-- **node_006** = TTO earliest-pair → KM-ready CSV under `outputs/km_raw/`
+## Data (non-distributed)
 
-For naming/versioning of figures/tables and metadata cataloging, see `sql/90_figures.md`.
-
-## SQL Pseudocode
-
-See `sql/*.md` for dataset-agnostic pseudocode. The flow aligns with the Word spec:  
-1) conventions/aliases, 2) PLID, 3) disproportionality, 4) stratified & export `table_024′` → concat → **import `table_027`**, 5) EBGM in Python (**node_005**) → **`table_028`**, 6) figures.
+Data are **not included**. See **`data/README.md`** for: how to obtain/place FAERS/JADER, expected columns, subgroup definitions, and known pitfalls.
 
 ## How to Cite
-
-If you use this code, please cite:
 
 ```
 Satoko Watanabe, Fibrates-Biliary ADEs SRS Reproducible Code (MSIP + Python), <YEAR>, <URL/DOI>.
 ```
-
-A machine-readable citation file (`CITATION.cff`) is recommended once the metadata is ready.
 
 ## License
 
@@ -143,10 +122,3 @@ A machine-readable citation file (`CITATION.cff`) is recommended once the metada
 - **Corresponding:** Satoko Watanabe  
 - **Affiliation:** Sagara Laboratory  
 - **Email:** hsagara.laboratory@gmail.com
-
-## Roadmap / TODO
-
-- [ ] Add `examples/` with minimal CSVs and run notes
-- [ ] Add `outputs/_catalog.json` for figure/table provenance
-- [ ] Add CI (GitHub Actions) smoke test on Python 3.13
-- [ ] Add `CITATION.cff` with authors, title, version, date
