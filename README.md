@@ -95,7 +95,7 @@ pip install -r requirements.txt
 
 - **node_004** → 2×2 metrics (optionally export as CSV in your environment)  
 - **node_005** → EBGM (`table_027` → `table_028`)  
-- **node_006** → TTO earliest-pair (KM-ready)
+- **node_006** → TTO earliest-pair
 
 For naming and provenance conventions, see `sql/90_figures.md`.
 
