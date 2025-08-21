@@ -2,6 +2,17 @@
 
 ## JADER
 
+### Scope and Join Policy (Aligned with Word flow)
+
+- **Default drug scope:** *Pemafibrate only*. (Fenofibrate/Bezafibrate can be enabled via a parameter.)
+- **Joins:** Use **FULL OUTER JOIN** between DRUG and REAC at the case level, then later filter to valid date pairs and apply earliest-pair selection.
+- **Earliest pair:** Keep only the earliest valid `(start_date, event_date)` per `(case_id, drug_of_interest, event_term)`.
+- **TTO:** `DATEDIFF(event_date, start_date) + 1`; exclude negative TTO.
+
+> Implementation detail: In SQL-like pseudocode below, replace `JOIN` between DRUG and REAC with `FULL OUTER JOIN` if your engine supports it; otherwise emulate via `UNION` + grouping.
+> Filter to Pemafibrate by adding `WHERE m.canonical = 'Pemafibrate'` after the fibrate-name mapping join.
+
+
 ```sql
 -- Merge DRUG + REAC on case_id; filter to Pemafibrate and biliary PTs
 CREATE VIEW jader_tto_candidates AS
