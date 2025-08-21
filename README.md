@@ -89,13 +89,12 @@ Options:
 - `outputs/km_bootstrap/<drug>__<event>.csv` — bootstrap summaries (optional)  
 - `outputs/figs/` — key figures (e.g., volcano/scatter, KM curves) (<TBD>)
 
+
 ## Figures/Tables ↔ Code Mapping (MSIP)
 
-If you are executing in **MSIP**, map nodes to scripts as follows (adjust as needed):
-
-- **node_006** = counts -> metrics (`scripts/metrics.py`)  
-- **node_014** = KM (raw) per drug with FAERS+JADER (`scripts/km_raw.py`)  
-- **node_015** = KM (bootstrap + IQR) (`scripts/km_bootstrap.py`)
+- **node_004** = counts -> metrics (`scripts/metrics.py`)  
+- **node_005** = EBGM from subgroup counts (`scripts/ebgm.py`, or Python node reading `table_027` -> `table_028`)  
+- **node_006** = TTO earliest-pair extraction (`scripts/km_raw.py`), then KM/quantiles downstream
 
 ## SQL Pseudocode
 
