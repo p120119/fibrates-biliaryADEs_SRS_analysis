@@ -59,8 +59,9 @@ Optional tables are not strictly required for this pipeline but may help with PL
 
 ## Subgroup Definitions (stratification)
 - **Sex**: normalize to `Male` / `Female` (e.g., JADER `'男性' → 'Male'`).
-- **Age bands**: for JADER strings like “`○○歳代の○○`”, extract the **decade number** via the regex `([0-9]{2})歳代`, then map to  
-  - `20–50s` (20/30/40/50), and `60s+` (≥60).
+- **Age bands**: use **only** JADER values that contain “`○○歳代`”. Extract the **two-digit decade** via the regex `([0-9]{2})\s*歳代`; then map  
+  - `20–50s` for decades `20/30/40/50`; `60s+` for decades `>=60`.  
+  - Records **without** the `歳代` pattern (e.g., `55歳`, `不明`, `10歳未満`) are **excluded** from stratification (treated as missing).
 - **BMI**: computed as `kg / m^2` **after** the +5 adjustments to weight/height in `node_001`; round to 2 decimals.  
   - BMI cut points: `<25` vs `>=25`.
 
