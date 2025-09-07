@@ -44,7 +44,7 @@ CREATE TABLE fibrate_name_map(
 
 ## Subgroups (for stratified analysis)
 
-- sex: Male / Female
+- sex: raw sex values
 - age bands: 20–50s vs 60s+ (exact cut rules as per study)
 - BMI bands: < 25 vs ≥ 25
 
