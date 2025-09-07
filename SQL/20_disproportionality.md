@@ -6,9 +6,9 @@
 -- Canonical drug_of_interest view per dataset
 CREATE VIEW {ds}_drug_of_interest AS
 SELECT
-  {id_col}   AS case_id,
-  m.canonical AS drug_of_interest,
-  {drug_seq} AS drug_seq
+  {id_col}     AS primaryid,
+  m.canonical  AS drug_of_interest,
+  {drug_seq}   AS drug_seq
 FROM {drug_table} d
 JOIN fibrate_name_map m
   ON UPPER(TRIM(d.{drug_col})) = UPPER(TRIM(m.raw_name));
@@ -19,8 +19,8 @@ JOIN fibrate_name_map m
 -- Biliary events per dataset
 CREATE VIEW {ds}_biliary_events AS
 SELECT
-  {id_col} AS case_id,
-  {event_col} AS event_term
+  {id_col}     AS primaryid,
+  {event_col}  AS event_term
 FROM {reac_table} r
 JOIN biliary_pt_list b
   ON UPPER(TRIM(r.{event_col})) = UPPER(TRIM(b.pt));
@@ -34,25 +34,25 @@ JOIN biliary_pt_list b
 
 -- Inner joins to enforce both drug exposure and biliary event
 CREATE VIEW jader_fibrate_biliary AS
-SELECT DISTINCT a.case_id, a.drug_of_interest
+SELECT DISTINCT a.primaryid, a.drug_of_interest
 FROM jader_drug_of_interest a
-JOIN jader_biliary_events b USING (case_id);
+JOIN jader_biliary_events b USING (primaryid);
 
 -- Totals for 2x2
 CREATE VIEW jader_all_cases AS
-SELECT COUNT(DISTINCT case_id) AS n_all FROM table_DRUG;  -- or PLID base
+SELECT COUNT(DISTINCT primaryid) AS n_all FROM table_DRUG;  -- or PLID base
 ```
 
 ## FAERS: extract and join
 
 ```sql
 CREATE VIEW faers_fibrate_biliary AS
-SELECT DISTINCT a.case_id, a.drug_of_interest
+SELECT DISTINCT a.primaryid, a.drug_of_interest
 FROM faers_drug_of_interest a
-JOIN faers_biliary_events b USING (case_id);
+JOIN faers_biliary_events b USING (primaryid);
 
 CREATE VIEW faers_all_cases AS
-SELECT COUNT(DISTINCT case_id) AS n_all FROM table_DRUG;  -- or PLID base
+SELECT COUNT(DISTINCT primaryid) AS n_all FROM table_DRUG;  -- or PLID base
 ```
 
 ## 2x2 counts per drug_of_interest
@@ -62,19 +62,19 @@ SELECT COUNT(DISTINCT case_id) AS n_all FROM table_DRUG;  -- or PLID base
 ```sql
 -- Exposed with event (n11)
 CREATE VIEW {ds}_n11 AS
-SELECT drug_of_interest, COUNT(DISTINCT case_id) AS n11
+SELECT drug_of_interest, COUNT(DISTINCT primaryid) AS n11
 FROM {ds}_fibrate_biliary
 GROUP BY drug_of_interest;
 
 -- Exposed total
 CREATE VIEW {ds}_n1_ AS
-SELECT drug_of_interest, COUNT(DISTINCT case_id) AS n1dot
+SELECT drug_of_interest, COUNT(DISTINCT primaryid) AS n1dot
 FROM {ds}_drug_of_interest
 GROUP BY drug_of_interest;
 
 -- Event total (any drug)
-CREATE VIEW {ds}_ _1 AS
-SELECT 'Overall' AS drug_of_interest, COUNT(DISTINCT case_id) AS ndot1
+CREATE VIEW {ds}_dot1 AS
+SELECT 'Overall' AS drug_of_interest, COUNT(DISTINCT primaryid) AS ndot1
 FROM {ds}_biliary_events;
 
 -- All cases count (scalar)
@@ -86,13 +86,13 @@ FROM {ds}_biliary_events;
 CREATE VIEW {ds}_twobytwo AS
 SELECT
   a.drug_of_interest,
-  COALESCE(n11.n11, 0)                              AS n11,
-  GREATEST(a.n1dot - COALESCE(n11.n11, 0), 0)       AS n12,
-  GREATEST(e.ndot1 - COALESCE(n11.n11, 0), 0)       AS n21,
+  COALESCE(n11.n11, 0)                                        AS n11,
+  GREATEST(a.n1dot - COALESCE(n11.n11, 0), 0)                 AS n12,
+  GREATEST(e.ndot1 - COALESCE(n11.n11, 0), 0)                 AS n21,
   GREATEST(allc.n_all - a.n1dot - e.ndot1 + COALESCE(n11.n11, 0), 0) AS n22
 FROM {ds}_n1_ a
 LEFT JOIN {ds}_n11 n11 USING (drug_of_interest)
-CROSS JOIN {ds}_ _1 e
+CROSS JOIN {ds}_dot1 e
 CROSS JOIN {ds}_all_cases allc;
 ```
 
