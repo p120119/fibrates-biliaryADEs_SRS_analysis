@@ -4,39 +4,39 @@ import pandas as pd
 from scipy.stats import gamma
 from scipy.optimize import minimize
 
-# --- 入力データ ---
+# --- Input data ---
 df = table.to_pandas()
 
-# --- Overall行と Subgroup行 に分離 ---
+# --- Split into Overall row(s) and Subgroup rows ---
 overall_df = df[df["Subgroup"] == "Overall"].copy()
 sub_df = df[df["Subgroup"] != "Overall"].copy()
 
-# --- Subgroupごとの期待値 E0_s の計算 ---
+# --- Compute expected counts E0_s per subgroup ---
 sub_df["n1+"] = sub_df["n11"] + sub_df["n12"]
 sub_df["n+1"] = sub_df["n11"] + sub_df["n21"]
 sub_df["n++"] = sub_df["n11"] + sub_df["n12"] + sub_df["n21"] + sub_df["n22"]
 sub_df["E0_s"] = (sub_df["n1+"] * sub_df["n+1"]) / sub_df["n++"]
 
-# --- Drug-AE単位で E0, O を集計 ---
+# --- Aggregate E0 and O per drug_of_interest ---
 grouped_sub = sub_df.groupby("drug_of_interest").agg({
     "E0_s": "sum",
     "n11": "sum"
 }).reset_index().rename(columns={"E0_s": "E0", "n11": "O"})
 
-# --- Overallから背景統計を取得 ---
+# --- Get background totals from Overall ---
 overall_df["n1+"] = overall_df["n11"] + overall_df["n12"]
 overall_df["n+1"] = overall_df["n11"] + overall_df["n21"]
 overall_df["n++"] = overall_df["n11"] + overall_df["n12"] + overall_df["n21"] + overall_df["n22"]
 overall_stats = overall_df[["drug_of_interest", "n1+", "n+1", "n++"]]
 
-# --- マージ ---
+# --- Merge ---
 result_df = pd.merge(grouped_sub, overall_stats, on="drug_of_interest", how="left")
 
-# --- O, E の抽出 ---
+# --- Extract O and E ---
 O = result_df["O"].astype(float).values
 E = result_df["E0"].astype(float).values
 
-# --- 尤度関数（混合ガンマ） ---
+# --- Negative log-likelihood (mixture of Gammas) ---
 def neg_log_likelihood_mgps(params, O, E):
     α1, β1, α2, β2, P = params
     if min(α1, β1, α2, β2) <= 0 or not (0 < P < 1):
@@ -48,7 +48,7 @@ def neg_log_likelihood_mgps(params, O, E):
         logL += np.log(P * f1 + (1 - P) * f2 + 1e-12)
     return -logL
 
-# --- 初期値セット（5通り） ---
+# --- Initial parameter sets (5 variants) ---
 init_sets = [
     [0.2, 0.1, 2, 4, 1/3],
     [0.1, 0.1, 10, 10, 0.2],
@@ -57,7 +57,7 @@ init_sets = [
     [0.2, 0.2, 5, 5, 0.4]
 ]
 
-# --- 最適化を実行して最良の初期値を選ぶ ---
+# --- Run optimization and pick the best starting point ---
 results = []
 for init in init_sets:
     res = minimize(
@@ -71,25 +71,25 @@ best_result = min(results, key=lambda r: r.fun)
 α1_hat, β1_hat, α2_hat, β2_hat, P_hat = best_result.x
 
 # ===============================
-# 乱数を決定化：seed = 12345
+# Deterministic random seed: 12345
 # ===============================
 BASE_SEED = 12345
 rng = np.random.default_rng(BASE_SEED)
 
-# --- EBGM 計算（DuMouchel 1999 に準拠：λ をサンプリング） ---
+# --- EBGM calculation ---
 EBGM, EB05, EB95 = [], [], []
-n_samples = 10_000  # 必要に応じて増減
+n_samples = 10_000  # increase/decrease as needed
 
 for o, e in zip(O, E):
     n1 = int(n_samples * P_hat)
     n2 = n_samples - n1
 
-    # NumPy の決定的 RNG を使用（SciPyのrvsではなく rng.gamma を使う）
+    # Use NumPy's deterministic RNG
     samples1 = rng.gamma(shape=o + α1_hat, scale=1 / (β1_hat + e), size=n1)
     samples2 = rng.gamma(shape=o + α2_hat, scale=1 / (β2_hat + e), size=n2)
     all_samples = np.concatenate([samples1, samples2], dtype=float)
 
-    log_samples = np.log(all_samples + 1e-12)  # 数値安定化のため微小項を加算
+    log_samples = np.log(all_samples + 1e-12)  # Add a tiny term for numerical stability before logging
     ebgm = np.exp(log_samples.mean())
     eb05 = np.exp(np.percentile(log_samples, 5))
     eb95 = np.exp(np.percentile(log_samples, 95))
@@ -98,11 +98,11 @@ for o, e in zip(O, E):
     EB05.append(round(float(eb05), 3))
     EB95.append(round(float(eb95), 3))
 
-# --- 結果の整形 ---
+# --- Format results ---
 result_df["EBGM"] = EBGM
 result_df["EBGM05"] = EB05
 result_df["EBGM95"] = EB95
 result_df["MGPS_Signal"] = ["Yes" if eb >= 2.0 else "No" for eb in EB05]
 
-# --- MSI形式で返す ---
+# --- Return in MSI format ---
 result = pandas_to_dataframe(result_df)
