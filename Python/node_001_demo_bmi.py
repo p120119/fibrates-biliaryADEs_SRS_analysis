@@ -23,14 +23,14 @@ from msi.common.dataframe.special_values import Na, Error, NegativeInf, Positive
 from msi.common.dataframe import DataFrame
 import pandas as pd
 
-# テーブルを pandas に変換
+# Convert the MSIP Table to a pandas DataFrame
 df = table.to_pandas()
 
-# 安全な文字列変換（NaN/Categorical 対応）
+# Safe string conversion (handles NaN/Categorical)
 for col in ['体重', '身長', '年齢']:
     df[f'{col}_str'] = df[col].apply(lambda x: str(x) if pd.notnull(x) else '')
 
-# 数値抽出関数（"未満" → 0、それ以外は数字抽出）
+# Numeric extraction helper ('未満' -> 0; otherwise extract digits)
 def extract_numeric_or_zero(val):
     if pd.isna(val):
         return None
@@ -42,26 +42,26 @@ def extract_numeric_or_zero(val):
     match = pd.Series([val]).str.extract(r'(\d+)')
     return int(match[0][0]) if pd.notnull(match[0][0]) else None
 
-# 数値抽出
+# Extract numeric values
 df['体重数値'] = df['体重_str'].apply(extract_numeric_or_zero)
 df['身長数値'] = df['身長_str'].apply(extract_numeric_or_zero)
 df['年齢数値'] = df['年齢_str'].apply(extract_numeric_or_zero)
 
-# +5補正（体重・身長のみ）、年齢は補正なし
+# Apply +5 adjustment to weight/height only (no adjustment to age)
 df['WEIGHT'] = pd.to_numeric(df['体重数値'], errors='coerce') + 5
 df['HEIGHT'] = pd.to_numeric(df['身長数値'], errors='coerce') + 5
 df['AGE'] = pd.to_numeric(df['年齢数値'], errors='coerce')
 
-# BMIを計算する関数
+# BMI calculation function
 def calculate_bmi(weight, height_cm):
     if pd.isna(weight) or pd.isna(height_cm) or height_cm == 0:
         return None
     height_m = height_cm / 100  # cm → m
     return round(weight / (height_m ** 2), 2)
 
-# BMI列の追加
+# Add BMI column
 df['BMI'] = df.apply(lambda row: calculate_bmi(row['WEIGHT'], row['HEIGHT']), axis=1)
 
-# MSI DataFrame に変換
+# Convert to an MSIP DataFrame
 df_converted = df.astype(object)
 result = DataFrame(df_converted.to_dict(orient="list"))
