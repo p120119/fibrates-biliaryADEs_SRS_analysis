@@ -5,22 +5,29 @@
 ```sql
 CREATE VIEW jader_subgroup_base AS
 SELECT
-  p.case_id, p.bmi, p.age_num,
-  CASE WHEN sex IN ('男性','Male','M') THEN 'Male'
-       WHEN sex IN ('女性','Female','F') THEN 'Female'
-       ELSE NULL END AS sex_norm
-FROM jader_plid p;
+  p.primary_id,
+  p.bmi,
+  p.age_num,
+  p.sex
+FROM jader_plid p
+WHERE
+
+ -- no label normalization; drop error values only
+  p.bmi IS NOT NULL
+  AND p.age_num IS NOT NULL
+  AND p.sex IS NOT NULL
+  AND UPPER(TRIM(p.sex)) NOT IN ('NA','N/A','ERROR');
 ```
 
-> Exclude NULL/NA/ERROR values for subgroup variables.
+> No label normalization. Exclude NULL/NA/ERROR values for subgroup variables.
 
 ## Define groupers
 
 ```sql
 CREATE VIEW jader_subgroups AS
 SELECT
-  case_id,
-  sex_norm AS sex_group,
+  primary_id,
+  sex AS sex_group,
   CASE WHEN age_num BETWEEN 20 AND 59 THEN '20-50s'
        WHEN age_num >= 60 THEN '60s+'
        ELSE NULL END AS age_group,
@@ -44,7 +51,7 @@ SELECT
   g.sex_group AS subgroup_level, 'sex' AS subgroup_name,
   t.drug_of_interest, SUM(...) AS n11, SUM(...) AS n12, SUM(...) AS n21, SUM(...) AS n22
 FROM {ds}_twobytwo_inputs t
-JOIN {ds}_subgroups g USING (case_id)
+JOIN {ds}_subgroups g USING (primary_id)
 GROUP BY 1,2,3
 UNION ALL
 SELECT
