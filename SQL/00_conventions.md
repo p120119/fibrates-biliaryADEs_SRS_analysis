@@ -14,7 +14,7 @@ This document defines common aliases so that the same pseudocode can operate on 
 | event date | 有害事象発現日 | event_dt |
 | number of drugs in case | 服薬数 | number_of_drug |
 
-> We will alias these as: `case_id`, `drug_of_interest`, `drug_seq`, `event_term`, `start_date`, `event_date`, `num_drugs`.
+> We will alias these as: `primaryid`, `drug_of_interest`, `drug_seq`, `event_term`, `start_date`, `event_date`, `num_drugs`.
 
 ## Biliary ADE definition
 
