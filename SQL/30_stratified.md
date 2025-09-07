@@ -5,7 +5,7 @@
 ```sql
 CREATE VIEW jader_subgroup_base AS
 SELECT
-  p.primary_id,
+  p.primaryid,
   p.bmi,
   p.age_num,
   p.sex
@@ -26,7 +26,7 @@ WHERE
 ```sql
 CREATE VIEW jader_subgroups AS
 SELECT
-  primary_id,
+  primaryid,
   sex AS sex_group,
   CASE WHEN age_num BETWEEN 20 AND 59 THEN '20-50s'
        WHEN age_num >= 60 THEN '60s+'
@@ -51,7 +51,7 @@ SELECT
   g.sex_group AS subgroup_level, 'sex' AS subgroup_name,
   t.drug_of_interest, SUM(...) AS n11, SUM(...) AS n12, SUM(...) AS n21, SUM(...) AS n22
 FROM {ds}_twobytwo_inputs t
-JOIN {ds}_subgroups g USING (primary_id)
+JOIN {ds}_subgroups g USING (primaryid)
 GROUP BY 1,2,3
 UNION ALL
 SELECT
