@@ -18,7 +18,7 @@ This document defines common aliases so that the same pseudocode can operate on 
 
 ## Biliary ADE definition
 
-- Use the HLT *“胆嚢炎および胆石症”* and the **14 PTs** listed in Supplementary Table S1. Maintain the list as a table/view:
+- Use the HLT *“Cholecystitis and cholelithiasis”* and the **14 PTs** listed in Supplementary Table S1. Maintain the list as a table/view:
 ```sql
 -- Logical placeholder: replace with actual 14 PTs from Supplementary Table S1
 CREATE VIEW biliary_pt_list AS
