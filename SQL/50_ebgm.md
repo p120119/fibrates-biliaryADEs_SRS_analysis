@@ -2,7 +2,7 @@
 
 This file follows the flow you described in the Word spec:
 
-1) **Stratified results consolidation** → export each subgroup result (a.k.a. `table_024'`) to CSV, add a `Subgroup` column, concatenate into *one* CSV, re-import as **`table_027`**.
+1) **Stratified results consolidation** → export each subgroup result (a.k.a. `table_024_prime`) to CSV, add a `Subgroup` column, concatenate into *one* CSV, re-import as **`table_027`**.
 2) **EBGM computation** in a **Python node (`node_005`)**: read **`table_027`**, compute **expected counts per Subgroup**, then compute **EBGM per Drug**, and write **`table_028`**.
 
 > Note: For ASCII safety, we will refer to `table_024'` as **`table_024_prime`** when creating file/table names.
@@ -37,8 +37,7 @@ CREATE TABLE table_027 (
   n21 INTEGER,
   n22 INTEGER
 );
-
--- Import step is dialect-specific (COPY/LOAD DATA). After import:
+-- Load CSV here (COPY/LOAD DATA) and verify:
 -- SELECT COUNT(*) FROM table_027;
 ```
 
@@ -49,8 +48,8 @@ CREATE TABLE table_027 (
 **Input:** `table_027` (subgroup-level counts).  
 **Outputs:**
 
-- **`table_028_subgroup`**: EBGM (and bounds) **per (drug, subgroup_name, subgroup_level)**.
-- **`table_028`**: EBGM **per drug** (pooled across subgroups).
+- **`table_028_subgroup`**: EBGM (and bounds) **per (drug_of_interest, subgroup_name, subgroup_level)**.
+- **`table_028`**: EBGM **per drug_of_interest** (pooled across subgroups).
 
 > Your original note said “compute expected per Subgroup, EBGM per Drug.” We therefore produce both: the fine-grained *and* the pooled tables. If you want only per-drug output, skip `table_028_subgroup`.
 
@@ -66,7 +65,7 @@ This is the same expectation used for disproportionality (rearranged 2x2). Save 
 
 ### EBGM (MGPS-style) outline
 
-EBGM is a shrinkage estimator derived from a gamma–Poisson mixture model (DuMouchel). Implement in Python as:
+EBGM is the posterior geometric mean of the reporting rate 𝜆 under a 2-component Gamma mixture prior (DuMouchel). In Python:
 
 ```python
 # Pseudocode only
